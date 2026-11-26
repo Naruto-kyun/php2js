@@ -17,8 +17,9 @@ use PhpParser\Node\Scalar\Float_;
 
 class Compiler extends PrettyPrinterAbstract
 {
-    public $vars = array();
-    public $mode = 'js';
+    public array $vars = [];
+    public string $mode = 'js';
+	public array $options = ['shortArraySyntax' => false];
     // Special nodes
 
 	protected function pInfixOpCompat(
@@ -78,6 +79,28 @@ class Compiler extends PrettyPrinterAbstract
     protected function pVarLikeIdentifier(Node\VarLikeIdentifier$node)
     {
         return   $node->name;
+    }
+
+    protected function pArrayItem(Node\ArrayItem $node): string {
+        return $this->pKey($node->key)
+             . ($node->byRef ? '&' : '')
+             . ($node->unpack ? '...' : '')
+             . $this->p($node->value);
+    }
+
+    protected function pKey(?Node $node): string {
+        if ($node === null) {
+            return '';
+        }
+
+        // => is not really an operator and does not typically participate in precedence resolution.
+        // However, there is an exception if yield expressions with keys are involved:
+        // [yield $a => $b] is interpreted as [(yield $a => $b)], so we need to ensure that
+        // [(yield $a) => $b] is printed with parentheses. We approximate this by lowering the LHS
+        // precedence to that of yield (which will also print unnecessary parentheses for rare low
+        // precedence unary operators like include).
+        $yieldPrecedence = $this->precedenceMap[Expr\Yield_::class][0];
+        return $this->p($node, self::MAX_PRECEDENCE, $yieldPrecedence) . ' => ';
     }
 
     protected function pAttribute(Node\Attribute$node)
